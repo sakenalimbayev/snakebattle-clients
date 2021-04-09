@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Web;
 using Codenjoy.SnakeBattleClient.Models;
 
@@ -31,14 +32,36 @@ namespace Codenjoy.SnakeBattleClient.ServerInteraction
         public void Play()
         {
             var url = GetWebSocketUrl(this.ServerUrl);
+            WebSocket socket = null;
 
-            using (var socket = new WebSocket(new Uri(url)))
+            try
             {
+                socket = new WebSocket(new Uri(url));
+                var shouldReconnect = false;
                 socket.Connect();
 
                 while (!ShouldExit)
                 {
-                    var response = socket.Recv();
+                    string response;
+                    try
+                    {
+                        if (shouldReconnect)
+                        {
+                            socket = new WebSocket(new Uri(url));
+                            socket.Connect();
+                            shouldReconnect = false;
+                        }
+                        response = socket.Recv();
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("Couldn't connect to the server, will try later");
+                        socket.Close();
+                        shouldReconnect = true;
+                        Thread.Sleep(3000);
+                        continue;
+                    }
+
 
                     if (!response.StartsWith(ResponsePrefix))
                     {
@@ -62,6 +85,13 @@ namespace Codenjoy.SnakeBattleClient.ServerInteraction
 
                         socket.Send(action);
                     }
+                }
+            }
+            finally
+            {
+                if (socket != null)
+                {
+                    socket.Dispose();
                 }
             }
         }
